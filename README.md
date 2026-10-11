@@ -9,6 +9,22 @@ innoextract is available under the ZLIB license - see the LICENSE file.
 
 See the website for [Linux packages](https://constexpr.org/innoextract/#packages).
 
+## macOS Arm64 CI binary
+
+GitHub Actions builds an Apple Silicon binary for macOS 14 or newer. To download it:
+
+1. Open the repository's **Actions** tab and select the **CI** workflow.
+2. Open a run with a successful **macOS Arm64 build** job, or use **Run workflow** to start a build manually.
+3. Download **innoextract-macos-arm64** from the run's **Artifacts** section (requires signing in to GitHub).
+4. Unzip the download, then extract and run the binary:
+
+   ```sh
+   tar -xzf innoextract-macos-arm64.tar.gz
+   ./innoextract --version
+   ```
+
+The archive includes the executable, its man page and license. Boost and liblzma are linked statically, so Homebrew is not required to run it. The archive preserves the executable's permissions.
+
 ## Contact
 
 [Website](https://constexpr.org/innoextract/)

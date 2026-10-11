@@ -5,6 +5,7 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ master ]
+  workflow_dispatch:
   schedule:
     - cron: '21 11 * * 5'
 
@@ -33,8 +34,8 @@ jobs:
       run: cmake --build ${{github.workspace}}/build --target style
 
   macos:
-    name: macOS build
-    runs-on: macos-latest
+    name: macOS Arm64 build
+    runs-on: macos-14
 
     steps:
     - uses: actions/checkout@v4
@@ -42,16 +43,55 @@ jobs:
     - name: Update
       run: brew update
 
-    - name: Workaround for Python install isssues - https://github.com/actions/runner-images/issues/8838
-      run: brew install python@3 || brew link --overwrite python@3
-
     - name: Dependencies
       env:
         HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
-      run: brew install boost xz
+      run: brew install cmake boost xz
 
     - name: Configure
-      run: cmake --version && cmake -B ${{github.workspace}}/build -Werror=dev -Werror=deprecated -DCONTINUOUS_INTEGRATION=1
+      run: |
+        cmake --version
+        cmake -S . -B build -Werror=dev -Werror=deprecated \
+          -DCONTINUOUS_INTEGRATION=1 \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_OSX_ARCHITECTURES=arm64 \
+          -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 \
+          -DCMAKE_POLICY_DEFAULT_CMP0167=NEW \
+          -DCMAKE_PREFIX_PATH="$(brew --prefix boost);$(brew --prefix xz)" \
+          -DBoost_USE_STATIC_LIBS=ON \
+          -DLZMA_USE_STATIC_LIBS=ON \
+          -DRUN_TESTS=OFF
 
     - name: Build
-      run: cmake --build ${{github.workspace}}/build
+      run: cmake --build build --parallel 3
+
+    - name: Test
+      run: ctest --test-dir build --output-on-failure
+
+    - name: Verify binary
+      run: |
+        test "$(lipo -archs build/innoextract)" = arm64
+        build/innoextract --version
+        python3 - <<'PY'
+        import subprocess
+
+        output = subprocess.check_output(["otool", "-L", "build/innoextract"], text=True)
+        print(output)
+        for line in output.splitlines()[1:]:
+            library = line.strip().split(" (", 1)[0]
+            if not library.startswith(("/usr/lib/", "/System/Library/")):
+                raise SystemExit(f"Unexpected non-system library: {library}")
+        PY
+
+    - name: Package binary
+      run: |
+        mkdir -p dist
+        cp build/innoextract build/innoextract.1 LICENSE dist/
+        tar -czf innoextract-macos-arm64.tar.gz -C dist innoextract innoextract.1 LICENSE
+
+    - name: Upload binary
+      uses: actions/upload-artifact@v4
+      with:
+        name: innoextract-macos-arm64
+        path: innoextract-macos-arm64.tar.gz
+        if-no-files-found: error
